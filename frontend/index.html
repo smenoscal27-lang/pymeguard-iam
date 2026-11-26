@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PymeGuard IAM — Identidad y Accesos Corporativos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .bg-grid-pattern {
+            background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+    </style>
+</head>
+<body class="bg-[#FAFAFA] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans antialiased selection:bg-zinc-900 selection:text-white transition-colors">
+
+    <!-- PANTALLA DE LOGIN SPLIT-SCREEN DE NIVEL EMPRESARIAL -->
+    <div id="loginView" class="min-h-screen grid grid-cols-1 lg:grid-cols-12">
+        
+        <!-- PANEL IZQUIERDO: IDENTIDAD Y CONFIANZA -->
+        <div class="hidden lg:flex lg:col-span-5 bg-zinc-950 text-white bg-grid-pattern p-12 flex-col justify-between relative overflow-hidden">
+            <div class="relative z-10 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-white text-zinc-950 flex items-center justify-center shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+                <span class="font-semibold text-base tracking-tight">PymeGuard IAM</span>
+            </div>
+
+            <div class="relative z-10 max-w-md space-y-6">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-zinc-300">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span>Arquitectura Zero Trust para Pymes</span>
+                </div>
+                <h2 class="text-3xl font-semibold tracking-tight leading-tight text-white">
+                    Control centralizado de identidades y accesos en un solo lugar.
+                </h2>
+                <p class="text-sm text-zinc-400 leading-relaxed">
+                    Elimina las contraseñas compartidas. Gestiona permisos por rol, exige autenticación 2FA y revoca accesos al instante con un clic.
+                </p>
+
+                <div class="pt-4 grid grid-cols-2 gap-4 border-t border-white/10 text-xs">
+                    <div>
+                        <p class="font-medium text-white">Single Sign-On (SSO)</p>
+                        <p class="text-zinc-500 mt-0.5">Tokens JWT firmados</p>
+                    </div>
+                    <div>
+                        <p class="font-medium text-white">One-Click Offboarding</p>
+                        <p class="text-zinc-500 mt-0.5">Revocación en &lt;1 segundo</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="relative z-10 flex items-center justify-between text-xs text-zinc-500">
+                <span>Cifrado bcrypt + TOTP RFC 6238</span>
+                <span>v1.0 Enterprise</span>
+            </div>
+        </div>
+
+        <!-- PANEL DERECHO: FORMULARIO DE ACCESO COMPACTO Y LIMPIO -->
+        <div class="lg:col-span-7 flex flex-col justify-center items-center p-6 sm:p-10 bg-[#FAFAFA]">
+            <div class="w-full max-w-[380px] space-y-6">
+                
+                <!-- Encabezado y Estado de Conexión -->
+                <div class="flex flex-col items-start">
+                    <div class="lg:hidden w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center mb-4">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <div class="w-full flex items-center justify-between gap-2">
+                        <h1 class="text-2xl font-semibold tracking-tight text-zinc-900">Iniciar sesión</h1>
+                        <div id="serverStatusBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-white text-zinc-600 border border-zinc-200 shadow-2xs">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                            <span>Conectando...</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-zinc-500 mt-1">Ingresa tus credenciales corporativas para continuar.</p>
+                </div>
+
+                <!-- Tarjeta del Formulario -->
+                <div class="bg-white p-6 rounded-2xl border border-zinc-200/90 shadow-xs">
+                    <form id="loginForm" class="space-y-4">
+                        <div>
+                            <label for="username" class="block text-xs font-medium text-zinc-700 mb-1.5">Usuario corporativo</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-400 pointer-events-none">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                    </svg>
+                                </span>
+                                <input type="text" id="username" required autocomplete="username" placeholder="ej. admin" 
+                                    class="w-full pl-10 pr-3.5 py-2.5 text-sm bg-zinc-50/60 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:bg-white focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="password" class="block text-xs font-medium text-zinc-700 mb-1.5">Contraseña</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-400 pointer-events-none">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                    </svg>
+                                </span>
+                                <input type="password" id="password" required autocomplete="current-password" placeholder="••••••••" 
+                                    class="w-full pl-10 pr-10 py-2.5 text-sm bg-zinc-50/60 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:bg-white focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition">
+                                <button type="button" onclick="togglePasswordVisibility()" title="Mostrar/Ocultar contraseña"
+                                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-700 transition">
+                                    <svg id="eyeIcon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="totpField" class="hidden pt-1">
+                            <label for="totpCode" class="block text-xs font-medium text-indigo-600 mb-1.5">Código de verificación 2FA (6 dígitos)</label>
+                            <input type="text" id="totpCode" placeholder="000000" maxlength="6" inputmode="numeric"
+                                class="w-full px-3.5 py-2.5 text-sm font-mono tracking-[0.35em] text-center bg-indigo-50/50 border border-indigo-300 rounded-xl text-zinc-900 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition">
+                        </div>
+
+                        <div id="loginError" class="hidden text-xs text-red-600 bg-red-50 border border-red-200/80 px-3 py-2.5 rounded-xl"></div>
+
+                        <button type="submit" class="w-full bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white text-sm font-medium py-2.5 px-4 rounded-xl shadow-xs transition flex items-center justify-center gap-2">
+                            <span>Continuar al portal</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Accesos Rápidos Compactos en 2 Columnas -->
+                <div>
+                    <p class="text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-2">Acceso rápido de evaluación</p>
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <button type="button" onclick="fillLogin('admin', 'Admin123*')" 
+                            class="group p-3 rounded-xl bg-white border border-zinc-200 hover:border-zinc-900 text-left transition shadow-2xs">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-zinc-900">Administrador</span>
+                                <span class="text-[10px] text-zinc-400 group-hover:text-zinc-900">Usar →</span>
+                            </div>
+                            <code class="block font-mono text-[11px] text-zinc-500 mt-1">admin / Admin123*</code>
+                        </button>
+
+                        <button type="button" onclick="fillLogin('empleado', 'User123*')" 
+                            class="group p-3 rounded-xl bg-white border border-zinc-200 hover:border-zinc-900 text-left transition shadow-2xs">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-zinc-900">Empleado</span>
+                                <span class="text-[10px] text-zinc-400 group-hover:text-zinc-900">Usar →</span>
+                            </div>
+                            <code class="block font-mono text-[11px] text-zinc-500 mt-1">empleado / User123*</code>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- APLICACIÓN PRINCIPAL CON ESTRUCTURA DE SIDEBAR + CONTENIDO -->
+    <div id="appShell" class="hidden min-h-screen flex flex-col md:flex-row">
+        
+        <!-- SIDEBAR LATERAL MINIMALISTA -->
+        <aside class="w-full md:w-64 bg-white dark:bg-zinc-900 border-b md:border-b-0 md:border-r border-zinc-200 dark:border-zinc-800 flex flex-col justify-between shrink-0 transition-colors">
+            <div>
+                <!-- Logo -->
+                <div class="h-16 px-5 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <span id="brandCompanyTitle" class="font-semibold text-sm tracking-tight text-zinc-900 dark:text-white block leading-none">PymeGuard</span>
+                            <span class="text-[10px] font-medium text-zinc-400">IAM Enterprise</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="toggleDarkMode()" title="Cambiar tema claro/oscuro" class="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                            </svg>
+                        </button>
+                        <button onclick="logout()" class="md:hidden text-xs text-zinc-500 dark:text-zinc-400 px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                            Salir
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Navegación Estructurada -->
+                <nav class="p-3 flex md:flex-col gap-1 overflow-x-auto">
+                    <button onclick="switchTab('portal')" data-tab="portal" class="nav-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition whitespace-nowrap">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                        </svg>
+                        <span>Portal SSO</span>
+                    </button>
+
+                    <button onclick="switchTab('security')" data-tab="security" class="nav-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition whitespace-nowrap">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <span>Mi Seguridad</span>
+                    </button>
+
+                    <div id="adminNavGroup" class="hidden md:pt-3 md:mt-2 md:border-t md:border-zinc-100 dark:md:border-zinc-800 flex md:flex-col gap-1">
+                        <span class="hidden md:block px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Administración</span>
+                        <button onclick="switchTab('users')" data-tab="users" class="nav-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition whitespace-nowrap">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                            </svg>
+                            <span>Usuarios y RBAC</span>
+                        </button>
+                        <button onclick="switchTab('apps-admin')" data-tab="apps-admin" class="nav-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition whitespace-nowrap">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                            </svg>
+                            <span>Catálogo Apps SSO</span>
+                        </button>
+                        <button onclick="switchTab('policies')" data-tab="policies" class="nav-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition whitespace-nowrap">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            <span>Políticas y Marca</span>
+                        </button>
+                        <button onclick="switchTab('logs')" data-tab="logs" class="nav-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition whitespace-nowrap">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            <span>Bitácora de Auditoría</span>
+                        </button>
+                    </div>
+                </nav>
+            </div>
+
+            <!-- Perfil de Usuario en Sidebar -->
+            <div class="hidden md:block p-4 border-t border-zinc-100 dark:border-zinc-800">
+                <div class="flex items-center gap-2.5 mb-3">
+                    <div id="userAvatar" class="w-8 h-8 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-semibold flex items-center justify-center shrink-0"></div>
+                    <div class="min-w-0">
+                        <p id="sidebarUserName" class="text-xs font-semibold text-zinc-900 dark:text-white truncate"></p>
+                        <p id="sidebarUserRole" class="text-[11px] text-zinc-500 dark:text-zinc-400 truncate"></p>
+                    </div>
+                </div>
+                <button onclick="logout()" class="w-full text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200/70 dark:hover:bg-zinc-700 py-2 rounded-xl transition">
+                    Cerrar sesión
+                </button>
+            </div>
+        </aside>
+
+        <!-- CONTENIDO PRINCIPAL -->
+        <main class="flex-1 p-5 sm:p-8 max-w-5xl mx-auto w-full">
+
+            <!-- BANNER DE CUMPLIMIENTO 2FA OBLIGATORIO -->
+            <div id="enforce2faBanner" class="hidden mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-start gap-3">
+                    <span class="text-amber-600 dark:text-amber-400 mt-0.5">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                    </span>
+                    <div>
+                        <p class="text-xs font-semibold text-amber-900 dark:text-amber-200">Política corporativa: Segundo factor (2FA) requerido</p>
+                        <p class="text-xs text-amber-700 dark:text-amber-300/80 mt-0.5">Tu organización exige autenticación multifactor para proteger los accesos SSO.</p>
+                    </div>
+                </div>
+                <button onclick="activar2FA()" class="shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium px-3.5 py-2 rounded-xl transition">
+                    Activar 2FA ahora
+                </button>
+            </div>
+
+            <!-- VISTA 1: PORTAL DE SERVICIOS SSO -->
+            <section id="tab-portal" class="tab-view space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-zinc-200 dark:border-zinc-800">
+                    <div>
+                        <h1 class="text-xl font-semibold tracking-tight text-zinc-900 dark:text-white">Aplicaciones Corporativas</h1>
+                        <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Inicio de sesión único (SSO) habilitado según tus privilegios RBAC.</p>
+                    </div>
+                    <span id="rolePill" class="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300"></span>
+                </div>
+
+                <!-- CHECKLIST DE ONBOARDING COMERCIAL (Solo Admin) -->
+                <div id="onboardingChecklist" class="hidden bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Guía de despliegue rápido</h3>
+                            <p class="text-xs text-zinc-500 mt-0.5">Completa estos pasos para blindar la seguridad de tu empresa.</p>
+                        </div>
+                        <span id="onboardingProgressText" class="text-xs font-mono font-semibold text-emerald-600 dark:text-emerald-400"></span>
+                    </div>
+                    <div id="onboardingStepsList" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3"></div>
+                </div>
+
+                <div id="appsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </section>
+
+            <!-- VISTA 2: MI SEGURIDAD (AUTOGESTIÓN EMPLEADO) -->
+            <section id="tab-security" class="tab-view hidden space-y-6">
+                <div class="pb-5 border-b border-zinc-200 dark:border-zinc-800">
+                    <h1 class="text-xl font-semibold tracking-tight text-zinc-900 dark:text-white">Seguridad de la Cuenta</h1>
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Gestiona tu segundo factor de autenticación y credenciales corporativas.</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Tarjeta 2FA -->
+                    <div class="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Autenticación Multifactor</span>
+                                <span id="badge2faStatus" class="px-2.5 py-0.5 rounded-full text-xs font-medium"></span>
+                            </div>
+                            <h3 class="text-base font-semibold text-zinc-900 dark:text-white">Google Authenticator / TOTP</h3>
+                            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
+                                Añade una capa adicional de protección exigiendo un código dinámico de 6 dígitos cada vez que inicies sesión.
+                            </p>
+                        </div>
+                        <div class="mt-6">
+                            <button onclick="activar2FA()" id="btn2fa" class="w-full sm:w-auto bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 text-xs font-medium px-4 py-2.5 rounded-xl transition">
+                                Configurar 2FA con código QR
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Tarjeta Cambio de Contraseña -->
+                    <div class="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Credenciales</span>
+                        <h3 class="text-base font-semibold text-zinc-900 dark:text-white mt-1">Cambiar contraseña</h3>
+                        <form id="changePasswordForm" class="mt-4 space-y-3">
+                            <input type="password" id="currentPassInput" placeholder="Contraseña actual" required
+                                class="w-full px-3.5 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 dark:focus:border-white transition">
+                            <input type="password" id="newPassInput" placeholder="Nueva contraseña (mín. 8 caracteres)" required minlength="8"
+                                class="w-full px-3.5 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 dark:focus:border-white transition">
+                            <button type="submit" class="bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 text-xs font-medium px-4 py-2 rounded-xl transition">
+                                Actualizar contraseña
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 3: DIRECTORIO DE USUARIOS Y RBAC (ADMIN) -->
+            <section id="tab-users" class="tab-view hidden space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-zinc-200 dark:border-zinc-800">
+                    <div>
+                        <h1 class="text-xl font-semibold tracking-tight text-zinc-900 dark:text-white">Usuarios y Control RBAC</h1>
+                        <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Alta de colaboradores, asignación de roles y revocación inmediata.</p>
+                    </div>
+                </div>
+
+                <!-- KPIs Rápidos -->
+                <div id="adminStatsGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+
+                <!-- Formulario Alta de Colaborador -->
+                <div class="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">Nuevo colaborador</h3>
+                    <form id="createUserForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                        <input type="text" id="newUsername" placeholder="Usuario (ej. mgarcia)" required 
+                            class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 transition">
+                        <input type="text" id="newFullName" placeholder="Nombre completo" required 
+                            class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 transition">
+                        <input type="password" id="newPassword" placeholder="Contraseña inicial" required 
+                            class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 transition">
+                        <select id="newRole" class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 transition">
+                            <option value="EMPLEADO">Rol: Empleado</option>
+                            <option value="CONTADOR">Rol: Contador</option>
+                            <option value="ADMIN">Rol: Administrador</option>
+                        </select>
+                        <button type="submit" class="bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 text-xs font-medium rounded-xl px-4 py-2 transition">
+                            + Registrar usuario
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Tabla de Usuarios -->
+                <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs overflow-hidden">
+                    <div class="p-3.5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-3">
+                        <input type="text" id="userSearchInput" oninput="renderUsersTable()" placeholder="Buscar por nombre o usuario..." 
+                            class="w-full max-w-xs px-3 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/50 font-medium text-zinc-500 dark:text-zinc-400">
+                                    <th class="py-3 px-4">Colaborador</th>
+                                    <th class="py-3 px-4">Rol RBAC</th>
+                                    <th class="py-3 px-4">2FA</th>
+                                    <th class="py-3 px-4">Estado</th>
+                                    <th class="py-3 px-4 text-right">One-Click Offboarding</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody" class="divide-y divide-zinc-100 dark:divide-zinc-800"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 3B: CATÁLOGO DE APLICACIONES SSO (ADMIN COMMERCIAL) -->
+            <section id="tab-apps-admin" class="tab-view hidden space-y-6">
+                <div class="pb-5 border-b border-zinc-200 dark:border-zinc-800">
+                    <h1 class="text-xl font-semibold tracking-tight text-zinc-900 dark:text-white">Catálogo de Aplicaciones SSO</h1>
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Agrega las herramientas SaaS de tu empresa y define qué roles tienen acceso.</p>
+                </div>
+
+                <div class="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">Integrar nueva aplicación</h3>
+                    <form id="createAppForm" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <input type="text" id="appNameInput" placeholder="Nombre (ej. Slack / Siigo)" required
+                                class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900">
+                            <input type="text" id="appDescInput" placeholder="Descripción breve" required
+                                class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900">
+                            <input type="url" id="appUrlInput" placeholder="URL SSO (https://...)" required
+                                class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900">
+                        </div>
+                        <div class="flex flex-wrap items-center justify-between gap-4 pt-1">
+                            <div class="flex items-center gap-4 text-xs">
+                                <span class="font-medium text-zinc-500">Roles autorizados:</span>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" value="ADMIN" checked class="app-role-cb rounded border-zinc-300"> <span>ADMIN</span>
+                                </label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" value="CONTADOR" class="app-role-cb rounded border-zinc-300"> <span>CONTADOR</span>
+                                </label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" value="EMPLEADO" class="app-role-cb rounded border-zinc-300"> <span>EMPLEADO</span>
+                                </label>
+                            </div>
+                            <button type="submit" class="bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 text-xs font-medium px-4 py-2 rounded-xl transition">
+                                + Agregar aplicación
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="adminAppsList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </section>
+
+            <!-- VISTA 3C: POLÍTICAS DE SEGURIDAD Y MARCA (ADMIN COMMERCIAL) -->
+            <section id="tab-policies" class="tab-view hidden space-y-6">
+                <div class="pb-5 border-b border-zinc-200 dark:border-zinc-800">
+                    <h1 class="text-xl font-semibold tracking-tight text-zinc-900 dark:text-white">Políticas de Seguridad y Marca</h1>
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Configura reglas globales de cumplimiento y personaliza el espacio de tu Pyme.</p>
+                </div>
+
+                <form id="policiesForm" class="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs space-y-5 max-w-2xl">
+                    <div>
+                        <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">Nombre de la Organización (Tenant)</label>
+                        <input type="text" id="policyCompanyName" required
+                            class="w-full px-3.5 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900">
+                    </div>
+
+                    <div class="flex items-center justify-between py-3 border-y border-zinc-100 dark:border-zinc-800">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-900 dark:text-white">Exigir 2FA obligatorio a todos los empleados</p>
+                            <p class="text-[11px] text-zinc-500 mt-0.5">Muestra una alerta prioritaria a usuarios sin Google Authenticator activo.</p>
+                        </div>
+                        <input type="checkbox" id="policyEnforce2fa" class="w-4 h-4 rounded border-zinc-300 accent-zinc-900">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">Protección contra fuerza bruta (Intentos fallidos máximos)</label>
+                        <select id="policyMaxAttempts" class="px-3.5 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900">
+                            <option value="3">3 intentos (Estricto)</option>
+                            <option value="5">5 intentos (Recomendado)</option>
+                            <option value="10">10 intentos (Flexible)</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 text-xs font-medium px-4 py-2.5 rounded-xl transition">
+                        Guardar políticas
+                    </button>
+                </form>
+            </section>
+
+            <!-- VISTA 4: BITÁCORA DE AUDITORÍA (ADMIN) -->
+            <section id="tab-logs" class="tab-view hidden space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-zinc-200 dark:border-zinc-800">
+                    <div>
+                        <h1 class="text-xl font-semibold tracking-tight text-zinc-900 dark:text-white">Bitácora de Auditoría</h1>
+                        <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Registro inmutable en tiempo real de accesos, fallos y revocaciones.</p>
+                    </div>
+                    <div class="flex items-center gap-2 self-start sm:self-auto">
+                        <button onclick="exportLogsCSV()" class="text-xs font-medium text-white bg-zinc-900 dark:bg-white dark:text-zinc-900 hover:bg-zinc-800 px-3.5 py-2 rounded-xl transition">
+                            ↓ Exportar CSV
+                        </button>
+                        <button onclick="loadAdminData()" class="text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-3.5 py-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition">
+                            Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-zinc-950 text-zinc-300 p-5 rounded-2xl border border-zinc-800 font-mono text-xs max-h-[480px] overflow-y-auto space-y-2.5 shadow-sm" id="logsContainer"></div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS CONTAINER -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- MODAL MINIMALISTA REUTILIZABLE -->
+    <div id="customModal" class="hidden fixed inset-0 z-50 bg-zinc-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white border border-zinc-200 rounded-2xl max-w-md w-full p-6 shadow-xl">
+            <h3 id="modalTitle" class="text-base font-semibold text-zinc-900"></h3>
+            <div id="modalBody" class="text-xs text-zinc-600 mt-2.5 leading-relaxed"></div>
+            <div id="modalActions" class="mt-6 flex justify-end gap-2"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = (window.location.protocol && window.location.protocol.startsWith("http")) ? `${window.location.origin}/api` : "http://127.0.0.1:8000/api";
+        let useMockBackend = false;
+        let token = localStorage.getItem("iam_token");
+        let currentUser = JSON.parse(localStorage.getItem("iam_user") || "null");
+        let cachedUsers = [];
+        let cachedLogs = [];
+
+        if (localStorage.getItem("iam_theme") === "dark") {
+            document.documentElement.classList.add("dark");
+        }
+
+        function toggleDarkMode() {
+            const isDark = document.documentElement.classList.toggle("dark");
+            localStorage.setItem("iam_theme", isDark ? "dark" : "light");
+            showToast(isDark ? "Modo oscuro activado" : "Modo claro activado");
+        }
+
+        function showToast(message, type = "default") {
+            const container = document.getElementById("toastContainer");
+            const toast = document.createElement("div");
+            const colorClass = type === "error"
+                ? "bg-red-600 text-white border-red-700"
+                : "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 border-zinc-800 dark:border-zinc-200";
+            toast.className = `pointer-events-auto px-4 py-2.5 rounded-xl text-xs font-medium shadow-lg border transition-all duration-300 transform translate-y-2 opacity-0 ${colorClass}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.remove("translate-y-2", "opacity-0");
+            });
+            setTimeout(() => {
+                toast.classList.add("opacity-0", "translate-y-2");
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        const defaultMockDB = {
+            policies: { enforce_2fa: 0, max_login_attempts: 5, company_name: "Mi Pyme S.A." },
+            users: [
+                { id: 1, username: "admin", full_name: "Gerente General (Admin)", password: "Admin123*", role: "ADMIN", is_active: 1, totp_enabled: 0, totp_secret: "", failed_attempts: 0 },
+                { id: 2, username: "empleado", full_name: "Juan Pérez (Contabilidad)", password: "User123*", role: "CONTADOR", is_active: 1, totp_enabled: 0, totp_secret: "", failed_attempts: 0 }
+            ],
+            apps: [
+                { id: 1, name: "Sistema Contable ERP", description: "Facturación, impuestos y nómina", url: "https://ejemplo-erp.local/sso", allowed_roles: ["ADMIN", "CONTADOR"] },
+                { id: 2, name: "Nube Corporativa", description: "Documentos compartidos y respaldos", url: "https://ejemplo-cloud.local/sso", allowed_roles: ["ADMIN", "CONTADOR", "EMPLEADO"] },
+                { id: 3, name: "Panel de Infraestructura", description: "Servidores y respaldos críticos", url: "https://ejemplo-infra.local/sso", allowed_roles: ["ADMIN"] }
+            ],
+            logs: [
+                { timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19), action: "INIT_DB", actor: "SYSTEM", details: "Base de datos inicializada con cuentas operativas." }
+            ]
+        };
+
+        function getMockDB() {
+            const saved = localStorage.getItem("iam_mock_db");
+            if (!saved) {
+                localStorage.setItem("iam_mock_db", JSON.stringify(defaultMockDB));
+                return defaultMockDB;
+            }
+            const parsed = JSON.parse(saved);
+            if (!parsed.policies) parsed.policies = defaultMockDB.policies;
+            return parsed;
+        }
+
+        function saveMockDB(db) {
+            localStorage.setItem("iam_mock_db", JSON.stringify(db));
+        }
+
+        function addMockLog(db, actor, action, details) {
+            db.logs.unshift({
+                timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                actor,
+                action,
+                details
+            });
+            saveMockDB(db);
+        }
+
+        function fillLogin(u, p) {
+            document.getElementById("username").value = u;
+            document.getElementById("password").value = p;
+        }
+
+        function togglePasswordVisibility() {
+            const input = document.getElementById("password");
+            input.type = input.type === "password" ? "text" : "password";
+        }
+
+        async function checkBackendConnection() {
+            const badge = document.getElementById("serverStatusBadge");
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 1200);
+                const res = await fetch(`${API_URL}/health`, { signal: controller.signal });
+                clearTimeout(timeout);
+                if (res.ok) {
+                    useMockBackend = false;
+                    badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>API FastAPI conectada</span>`;
+                    return;
+                }
+            } catch (e) {}
+
+            useMockBackend = true;
+            badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span><span>Modo Demo Local activo</span>`;
+        }
+
+        async function apiRequest(endpoint, method = "GET", body = null) {
+            if (!useMockBackend) {
+                const headers = { "Content-Type": "application/json" };
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+                const res = await fetch(`${API_URL}${endpoint}`, {
+                    method,
+                    headers,
+                    body: body ? JSON.stringify(body) : null
+                });
+                const data = await res.json();
+                return { ok: res.ok, status: res.status, data };
+            }
+
+            const db = getMockDB();
+            if (endpoint === "/login" && method === "POST") {
+                const user = db.users.find(u => u.username === body.username);
+                if (!user) {
+                    addMockLog(db, body.username, "LOGIN_FAILED", "Usuario inexistente.");
+                    return { ok: false, status: 401, data: { detail: "Usuario o contraseña incorrectos" } };
+                }
+                if (!user.is_active) {
+                    addMockLog(db, body.username, "LOGIN_BLOCKED", "Intento de acceso de cuenta revocada o bloqueada.");
+                    return { ok: false, status: 403, data: { detail: "Cuenta desactivada o bloqueada por seguridad." } };
+                }
+                if (user.password !== body.password) {
+                    user.failed_attempts = (user.failed_attempts || 0) + 1;
+                    const maxAtt = db.policies.max_login_attempts || 5;
+                    if (user.failed_attempts >= maxAtt && user.username !== "admin") {
+                        user.is_active = 0;
+                        addMockLog(db, body.username, "BRUTE_FORCE_LOCK", `Cuenta bloqueada tras ${user.failed_attempts} intentos fallidos.`);
+                    } else {
+                        addMockLog(db, body.username, "LOGIN_FAILED", `Contraseña incorrecta (${user.failed_attempts}/${maxAtt}).`);
+                    }
+                    return { ok: false, status: 401, data: { detail: "Usuario o contraseña incorrectos" } };
+                }
+                user.failed_attempts = 0;
+                if (user.totp_enabled && !body.totp_code) {
+                    return { ok: true, status: 200, data: { require_2fa: true } };
+                }
+                if (user.totp_enabled && body.totp_code.length !== 6) {
+                    addMockLog(db, body.username, "2FA_FAILED", "Código TOTP inválido.");
+                    return { ok: false, status: 401, data: { detail: "Código 2FA inválido (6 dígitos)" } };
+                }
+                addMockLog(db, user.username, "LOGIN_SUCCESS", `Inicio de sesión exitoso (Rol: ${user.role}).`);
+                const fakeJwt = btoa(JSON.stringify({ sub: user.username, role: user.role, exp: Date.now() + 3600000 }));
+                return {
+                    ok: true,
+                    status: 200,
+                    data: {
+                        access_token: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${fakeJwt}.sig`,
+                        enforce_2fa: Boolean(db.policies.enforce_2fa),
+                        company_name: db.policies.company_name,
+                        user: { username: user.username, full_name: user.full_name, role: user.role, totp_enabled: Boolean(user.totp_enabled) }
+                    }
+                };
+            }
+
+            const activeUser = currentUser ? db.users.find(u => u.username === currentUser.username) : null;
+            if (!activeUser || !activeUser.is_active) {
+                return { ok: false, status: 401, data: { detail: "Sesión revocada" } };
+            }
+
+            if (endpoint === "/portal/apps" && method === "GET") {
+                const apps = db.apps
+                    .filter(a => a.allowed_roles.includes(activeUser.role))
+                    .map(a => ({
+                        id: a.id,
+                        name: a.name,
+                        description: a.description,
+                        sso_redirect_url: `${a.url}?sso_token=jwt_${btoa(activeUser.username + ":" + a.name).slice(0, 24)}`
+                    }));
+                return { ok: true, status: 200, data: apps };
+            }
+
+            if (endpoint === "/2fa/setup" && method === "POST") {
+                const secret = "JBSWY3DPEHPK3PXP";
+                activeUser.totp_secret = secret;
+                activeUser.totp_enabled = 1;
+                addMockLog(db, activeUser.username, "2FA_ENABLED", "El usuario activó el segundo factor (TOTP).");
+                return { ok: true, status: 200, data: { secret, otpauth_uri: `otpauth://totp/PymeGuard:${activeUser.username}?secret=${secret}&issuer=PymeGuard` } };
+            }
+
+            if (endpoint === "/profile/password" && method === "POST") {
+                if (activeUser.password !== body.current_password) {
+                    return { ok: false, status: 401, data: { detail: "La contraseña actual es incorrecta." } };
+                }
+                activeUser.password = body.new_password;
+                addMockLog(db, activeUser.username, "PASSWORD_CHANGED", "El usuario actualizó su contraseña corporativa.");
+                return { ok: true, status: 200, data: { message: "Contraseña actualizada" } };
+            }
+
+            if (endpoint === "/admin/users" && method === "GET") {
+                return { ok: true, status: 200, data: db.users };
+            }
+
+            if (endpoint === "/admin/users" && method === "POST") {
+                if (db.users.some(u => u.username === body.username)) {
+                    return { ok: false, status: 400, data: { detail: "El nombre de usuario ya existe" } };
+                }
+                db.users.push({
+                    id: Date.now(),
+                    username: body.username,
+                    full_name: body.full_name,
+                    password: body.password,
+                    role: body.role.toUpperCase(),
+                    is_active: 1,
+                    totp_enabled: 0
+                });
+                addMockLog(db, activeUser.username, "USER_CREATED", `Creó al usuario '${body.username}' con rol ${body.role}.`);
+                return { ok: true, status: 200, data: { message: "Creado" } };
+            }
+
+            if (endpoint.startsWith("/admin/users/") && method === "PATCH") {
+                const id = Number(endpoint.split("/").pop());
+                const target = db.users.find(u => u.id === id);
+                if (target) {
+                    target.role = body.role;
+                    target.is_active = body.is_active;
+                    addMockLog(db, activeUser.username, "ROLE_UPDATED", `Actualizó a '${target.username}' -> Rol: ${body.role}, Activo: ${Boolean(body.is_active)}.`);
+                }
+                return { ok: true, status: 200, data: { message: "Actualizado" } };
+            }
+
+            if (endpoint.startsWith("/admin/offboarding/") && method === "POST") {
+                const id = Number(endpoint.split("/").pop());
+                const target = db.users.find(u => u.id === id);
+                if (target) {
+                    target.is_active = 0;
+                    addMockLog(db, activeUser.username, "EMERGENCY_OFFBOARDING", `Revocación inmediata ejecutada sobre '${target.username}'.`);
+                }
+                return { ok: true, status: 200, data: { message: "Revocado" } };
+            }
+
+            if (endpoint === "/admin/logs" && method === "GET") {
+                return { ok: true, status: 200, data: db.logs };
+            }
+
+            if (endpoint === "/admin/apps" && method === "GET") {
+                return { ok: true, status: 200, data: db.apps.map(a => ({ ...a, allowed_roles: a.allowed_roles.join(",") })) };
+            }
+
+            if (endpoint === "/admin/apps" && method === "POST") {
+                db.apps.push({
+                    id: Date.now(),
+                    name: body.name,
+                    description: body.description,
+                    url: body.url,
+                    allowed_roles: body.allowed_roles.split(",")
+                });
+                addMockLog(db, activeUser.username, "APP_CREATED", `Agregó aplicación SSO '${body.name}'.`);
+                return { ok: true, status: 200, data: { message: "Creada" } };
+            }
+
+            if (endpoint.startsWith("/admin/apps/") && method === "DELETE") {
+                const id = Number(endpoint.split("/").pop());
+                const target = db.apps.find(a => a.id === id);
+                db.apps = db.apps.filter(a => a.id !== id);
+                if (target) addMockLog(db, activeUser.username, "APP_DELETED", `Eliminó la aplicación SSO '${target.name}'.`);
+                return { ok: true, status: 200, data: { message: "Eliminada" } };
+            }
+
+            if (endpoint === "/admin/policies" && method === "GET") {
+                return { ok: true, status: 200, data: db.policies };
+            }
+
+            if (endpoint === "/admin/policies" && method === "PUT") {
+                db.policies = { ...body };
+                addMockLog(db, activeUser.username, "POLICY_UPDATED", `Políticas actualizadas (2FA Obligatorio: ${Boolean(body.enforce_2fa)}).`);
+                return { ok: true, status: 200, data: { message: "Actualizado" } };
+            }
+
+            return { ok: false, status: 404, data: { detail: "Endpoint no encontrado" } };
+        }
+
+        (async () => {
+            await checkBackendConnection();
+            if (token && currentUser) showDashboard();
+        })();
+
+        function switchTab(tabName) {
+            document.querySelectorAll(".tab-view").forEach(el => el.classList.add("hidden"));
+            document.getElementById(`tab-${tabName}`).classList.remove("hidden");
+
+            document.querySelectorAll(".nav-btn").forEach(btn => {
+                if (btn.dataset.tab === tabName) {
+                    btn.classList.add("bg-zinc-900", "text-white", "dark:bg-white", "dark:text-zinc-900");
+                    btn.classList.remove("text-zinc-600", "hover:bg-zinc-100");
+                } else {
+                    btn.classList.remove("bg-zinc-900", "text-white", "dark:bg-white", "dark:text-zinc-900");
+                    btn.classList.add("text-zinc-600", "hover:bg-zinc-100");
+                }
+            });
+        }
+
+        function openModal({ title, bodyHtml, confirmText = "Aceptar", confirmStyle = "bg-zinc-900 hover:bg-zinc-800 text-white", showCancel = false, onConfirm = null, onRender = null }) {
+            const modal = document.getElementById("customModal");
+            document.getElementById("modalTitle").textContent = title;
+            document.getElementById("modalBody").innerHTML = bodyHtml;
+            
+            const actions = document.getElementById("modalActions");
+            actions.innerHTML = "";
+
+            if (showCancel) {
+                const cancelBtn = document.createElement("button");
+                cancelBtn.className = "px-3.5 py-2 text-xs font-medium text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200/70 rounded-xl transition";
+                cancelBtn.textContent = "Cancelar";
+                cancelBtn.onclick = closeModal;
+                actions.appendChild(cancelBtn);
+            }
+
+            const okBtn = document.createElement("button");
+            okBtn.className = `px-4 py-2 text-xs font-medium rounded-xl transition ${confirmStyle}`;
+            okBtn.textContent = confirmText;
+            okBtn.onclick = () => {
+                closeModal();
+                if (onConfirm) onConfirm();
+            };
+            actions.appendChild(okBtn);
+
+            modal.classList.remove("hidden");
+            if (onRender) onRender();
+        }
+
+        function closeModal() {
+            document.getElementById("customModal").classList.add("hidden");
+        }
+
+        function copyText(text) {
+            const temp = document.createElement("textarea");
+            temp.value = text;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand("copy");
+            document.body.removeChild(temp);
+        }
+
+        document.getElementById("loginForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const errEl = document.getElementById("loginError");
+            errEl.classList.add("hidden");
+
+            const payload = {
+                username: document.getElementById("username").value.trim(),
+                password: document.getElementById("password").value,
+                totp_code: document.getElementById("totpCode").value.trim() || null
+            };
+
+            const { ok, data } = await apiRequest("/login", "POST", payload);
+
+            if (!ok) {
+                errEl.textContent = data.detail || "No se pudo verificar la identidad.";
+                errEl.classList.remove("hidden");
+                return;
+            }
+
+            if (data.require_2fa) {
+                document.getElementById("totpField").classList.remove("hidden");
+                document.getElementById("totpCode").focus();
+                return;
+            }
+
+            token = data.access_token;
+            currentUser = data.user;
+            localStorage.setItem("iam_token", token);
+            localStorage.setItem("iam_user", JSON.stringify(currentUser));
+            if (data.company_name) localStorage.setItem("iam_company", data.company_name);
+            if (data.enforce_2fa !== undefined) localStorage.setItem("iam_enforce_2fa", data.enforce_2fa ? "1" : "0");
+            showDashboard();
+        });
+
+        async function showDashboard() {
+            document.getElementById("loginView").classList.add("hidden");
+            document.getElementById("appShell").classList.remove("hidden");
+            
+            document.getElementById("brandCompanyTitle").textContent = localStorage.getItem("iam_company") || "PymeGuard";
+            document.getElementById("sidebarUserName").textContent = currentUser.full_name;
+            document.getElementById("sidebarUserRole").textContent = `@${currentUser.username} · ${currentUser.role}`;
+            document.getElementById("userAvatar").textContent = currentUser.full_name.charAt(0).toUpperCase();
+            document.getElementById("rolePill").innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>Perfil activo: <strong>${currentUser.role}</strong></span>`;
+
+            const enforce2fa = localStorage.getItem("iam_enforce_2fa") === "1";
+            if (enforce2fa && !currentUser.totp_enabled) {
+                document.getElementById("enforce2faBanner").classList.remove("hidden");
+            } else {
+                document.getElementById("enforce2faBanner").classList.add("hidden");
+            }
+
+            const badge2fa = document.getElementById("badge2faStatus");
+            if (currentUser.totp_enabled) {
+                badge2fa.className = "px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800";
+                badge2fa.textContent = "Activado";
+                document.getElementById("btn2fa").textContent = "Regenerar clave 2FA";
+            } else {
+                badge2fa.className = "px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800";
+                badge2fa.textContent = "Desactivado";
+            }
+
+            switchTab("portal");
+
+            const resApps = await apiRequest("/portal/apps", "GET");
+            if (resApps.status === 401) return logout();
+            const apps = resApps.data;
+
+            document.getElementById("appsGrid").innerHTML = apps.map(app => `
+                <div class="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600 rounded-2xl p-5 transition-all flex flex-col justify-between shadow-2xs">
+                    <div>
+                        <div class="flex items-center justify-between mb-3.5">
+                            <div class="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-900 dark:group-hover:bg-white group-hover:text-white dark:group-hover:text-zinc-900 text-zinc-700 dark:text-zinc-300 flex items-center justify-center transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                                </svg>
+                            </div>
+                            <span class="text-[10px] font-mono font-medium text-zinc-400 bg-zinc-50 dark:bg-zinc-800 px-2 py-0.5 rounded border border-zinc-200/70 dark:border-zinc-700">SSO JWT</span>
+                        </div>
+                        <h3 class="font-semibold text-zinc-900 dark:text-white text-sm">${app.name}</h3>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">${app.description}</p>
+                    </div>
+                    <button onclick="launchSSO('${app.name}', '${app.sso_redirect_url}')" 
+                        class="mt-5 w-full flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white bg-zinc-50 dark:bg-zinc-800/80 group-hover:bg-zinc-100 dark:group-hover:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700 px-3.5 py-2 rounded-xl transition">
+                        <span>Abrir servicio</span>
+                        <span class="transition-transform group-hover:translate-x-0.5">→</span>
+                    </button>
+                </div>
+            `).join("");
+
+            if (currentUser.role === "ADMIN") {
+                document.getElementById("adminNavGroup").classList.remove("hidden");
+                loadAdminData();
+            }
+        }
+
+        function launchSSO(appName, redirectUrl) {
+            openModal({
+                title: `Redirección SSO — ${appName}`,
+                bodyHtml: `
+                    <p class="mb-3">Identidad verificada por PymeGuard. Se ha emitido un token JWT firmado para ingresar sin contraseña adicional:</p>
+                    <div class="bg-zinc-950 text-zinc-300 font-mono text-[11px] p-3 rounded-xl break-all border border-zinc-800">
+                        ${redirectUrl}
+                    </div>
+                `,
+                confirmText: "Continuar"
+            });
+        }
+
+        document.getElementById("changePasswordForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const current_password = document.getElementById("currentPassInput").value;
+            const new_password = document.getElementById("newPassInput").value;
+            const res = await apiRequest("/profile/password", "POST", { current_password, new_password });
+            if (res.ok) {
+                e.target.reset();
+                openModal({ title: "Contraseña actualizada", bodyHtml: "<p>Tu nueva contraseña ha sido cifrada y guardada correctamente.</p>" });
+            } else {
+                openModal({ title: "Error", bodyHtml: `<p>${res.data.detail}</p>` });
+            }
+        });
+
+        function renderUsersTable() {
+            const query = (document.getElementById("userSearchInput")?.value || "").toLowerCase();
+            const filtered = cachedUsers.filter(u =>
+                u.full_name.toLowerCase().includes(query) || u.username.toLowerCase().includes(query)
+            );
+
+            document.getElementById("usersTableBody").innerHTML = filtered.map(u => `
+                <tr class="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors">
+                    <td class="py-3 px-4">
+                        <p class="font-medium text-zinc-900 dark:text-white">${u.full_name}</p>
+                        <p class="font-mono text-[11px] text-zinc-500">@${u.username}</p>
+                    </td>
+                    <td class="py-3 px-4">
+                        <select onchange="changeUserRole(${u.id}, this.value, ${u.is_active})"
+                            class="px-2 py-1 text-[11px] font-medium bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-700 dark:text-zinc-200 focus:outline-none">
+                            <option value="EMPLEADO" ${u.role === "EMPLEADO" ? "selected" : ""}>EMPLEADO</option>
+                            <option value="CONTADOR" ${u.role === "CONTADOR" ? "selected" : ""}>CONTADOR</option>
+                            <option value="ADMIN" ${u.role === "ADMIN" ? "selected" : ""}>ADMIN</option>
+                        </select>
+                    </td>
+                    <td class="py-3 px-4">
+                        ${u.totp_enabled 
+                            ? '<span class="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Activo</span>' 
+                            : '<span class="text-zinc-400">Inactivo</span>'}
+                    </td>
+                    <td class="py-3 px-4">
+                        ${u.is_active 
+                            ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800">Habilitado</span>' 
+                            : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200/80 dark:border-red-800">Revocado</span>'}
+                    </td>
+                    <td class="py-3 px-4 text-right">
+                        ${u.is_active && u.username !== 'admin' 
+                            ? `<button onclick="confirmOffboard(${u.id}, '${u.username}')" class="text-xs font-medium text-red-600 hover:text-white bg-red-50 dark:bg-red-950/40 hover:bg-red-600 border border-red-200/80 dark:border-red-800 hover:border-red-600 px-3 py-1.5 rounded-lg transition">Revocar acceso</button>` 
+                            : !u.is_active
+                                ? `<button onclick="changeUserRole(${u.id}, '${u.role}', 1)" class="text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 px-3 py-1.5 rounded-lg transition">Reactivar</button>`
+                                : '<span class="text-zinc-400">—</span>'}
+                    </td>
+                </tr>
+            `).join("");
+        }
+
+        document.getElementById("createUserForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const payload = {
+                username: document.getElementById("newUsername").value.trim(),
+                full_name: document.getElementById("newFullName").value.trim(),
+                password: document.getElementById("newPassword").value,
+                role: document.getElementById("newRole").value
+            };
+            const res = await apiRequest("/admin/users", "POST", payload);
+            if (res.ok) {
+                e.target.reset();
+                showToast("Colaborador registrado");
+                loadAdminData();
+            } else {
+                showToast(res.data.detail || "No se pudo crear el usuario", "error");
+            }
+        });
+
+        async function loadAdminData() {
+            const resUsers = await apiRequest("/admin/users", "GET");
+            if (resUsers.status === 401) return logout();
+            cachedUsers = resUsers.data;
+
+            const activeCount = cachedUsers.filter(u => u.is_active).length;
+            const mfaCount = cachedUsers.filter(u => u.totp_enabled).length;
+            const revokedCount = cachedUsers.filter(u => !u.is_active).length;
+
+            document.getElementById("adminStatsGrid").innerHTML = `
+                <div class="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                    <span class="text-[11px] text-zinc-500">Total Cuentas</span>
+                    <p class="text-xl font-semibold text-zinc-900 dark:text-white mt-1">${cachedUsers.length}</p>
+                </div>
+                <div class="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                    <span class="text-[11px] text-zinc-500">Activos</span>
+                    <p class="text-xl font-semibold text-emerald-600 mt-1">${activeCount}</p>
+                </div>
+                <div class="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                    <span class="text-[11px] text-zinc-500">Con 2FA</span>
+                    <p class="text-xl font-semibold text-zinc-900 dark:text-white mt-1">${mfaCount}</p>
+                </div>
+                <div class="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
+                    <span class="text-[11px] text-zinc-500">Revocados</span>
+                    <p class="text-xl font-semibold text-red-600 mt-1">${revokedCount}</p>
+                </div>
+            `;
+
+            renderUsersTable();
+
+            const resLogs = await apiRequest("/admin/logs", "GET");
+            cachedLogs = resLogs.data;
+            document.getElementById("logsContainer").innerHTML = cachedLogs.map(l => `
+                <div class="flex flex-wrap items-baseline gap-2 border-b border-zinc-900 pb-2 last:border-0">
+                    <span class="text-zinc-500 shrink-0">${l.timestamp}</span>
+                    <span class="px-1.5 py-0.5 rounded bg-zinc-900 text-amber-400 border border-zinc-800 text-[10px]">${l.action}</span>
+                    <span class="text-zinc-100 font-medium">${l.actor}:</span>
+                    <span class="text-zinc-400">${l.details}</span>
+                </div>
+            `).join("");
+
+            const resAdminApps = await apiRequest("/admin/apps", "GET");
+            const adminApps = resAdminApps.data || [];
+            document.getElementById("adminAppsList").innerHTML = adminApps.map(a => `
+                <div class="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 flex items-start justify-between gap-3">
+                    <div>
+                        <h4 class="text-sm font-semibold text-zinc-900 dark:text-white">${a.name}</h4>
+                        <p class="text-xs text-zinc-500 mt-0.5">${a.description}</p>
+                        <p class="text-[11px] font-mono text-zinc-400 mt-1">${a.url}</p>
+                        <div class="flex flex-wrap gap-1 mt-2">
+                            ${a.allowed_roles.split(",").map(r => `<span class="px-2 py-0.5 text-[10px] font-medium rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">${r}</span>`).join("")}
+                        </div>
+                    </div>
+                    <button onclick="deleteAdminApp(${a.id})" class="text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 px-2.5 py-1 rounded-lg transition">
+                        Eliminar
+                    </button>
+                </div>
+            `).join("");
+
+            const resPol = await apiRequest("/admin/policies", "GET");
+            if (resPol.ok && resPol.data) {
+                document.getElementById("policyCompanyName").value = resPol.data.company_name || "Mi Pyme S.A.";
+                document.getElementById("policyEnforce2fa").checked = Boolean(resPol.data.enforce_2fa);
+                document.getElementById("policyMaxAttempts").value = String(resPol.data.max_login_attempts || 5);
+                document.getElementById("brandCompanyTitle").textContent = resPol.data.company_name || "PymeGuard";
+            }
+
+            const steps = [
+                { done: Boolean(currentUser.totp_enabled), label: "1. Protege tu cuenta Admin con 2FA", action: "activar2FA()" },
+                { done: cachedUsers.length > 2, label: "2. Invita a un colaborador al equipo", action: "switchTab('users')" },
+                { done: adminApps.length > 3, label: "3. Conecta una nueva app corporativa", action: "switchTab('apps-admin')" }
+            ];
+            const completed = steps.filter(s => s.done).length;
+            const checklistEl = document.getElementById("onboardingChecklist");
+            if (completed < steps.length) {
+                checklistEl.classList.remove("hidden");
+                document.getElementById("onboardingProgressText").textContent = `${completed}/${steps.length} completado`;
+                document.getElementById("onboardingStepsList").innerHTML = steps.map(s => `
+                    <button onclick="${s.action}" class="p-3 rounded-xl border text-left text-xs transition ${s.done ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300' : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:border-zinc-900'}">
+                        <span class="font-medium block">${s.done ? '✓' : '○'} ${s.label}</span>
+                    </button>
+                `).join("");
+            } else {
+                checklistEl.classList.add("hidden");
+            }
+        }
+
+        function exportLogsCSV() {
+            if (!cachedLogs.length) return showToast("No hay registros para exportar", "error");
+            const headers = ["Fecha_Hora", "Evento", "Actor", "Detalle"];
+            const rows = cachedLogs.map(l => [l.timestamp, l.action, l.actor, `"${l.details.replace(/"/g, '""')}"`].join(","));
+            const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", `auditoria_iam_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("Reporte CSV descargado");
+        }
+
+        document.getElementById("createAppForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const roles = Array.from(document.querySelectorAll(".app-role-cb:checked")).map(cb => cb.value);
+            if (!roles.length) return showToast("Selecciona al menos un rol permitido", "error");
+            const payload = {
+                name: document.getElementById("appNameInput").value.trim(),
+                description: document.getElementById("appDescInput").value.trim(),
+                url: document.getElementById("appUrlInput").value.trim(),
+                allowed_roles: roles.join(",")
+            };
+            const res = await apiRequest("/admin/apps", "POST", payload);
+            if (res.ok) {
+                e.target.reset();
+                showToast("Aplicación SSO agregada");
+                loadAdminData();
+            }
+        });
+
+        async function deleteAdminApp(id) {
+            await apiRequest(`/admin/apps/${id}`, "DELETE");
+            showToast("Aplicación eliminada");
+            loadAdminData();
+        }
+
+        document.getElementById("policiesForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const company_name = document.getElementById("policyCompanyName").value.trim();
+            const enforce_2fa = document.getElementById("policyEnforce2fa").checked ? 1 : 0;
+            const max_login_attempts = Number(document.getElementById("policyMaxAttempts").value);
+            const res = await apiRequest("/admin/policies", "PUT", { company_name, enforce_2fa, max_login_attempts });
+            if (res.ok) {
+                localStorage.setItem("iam_company", company_name);
+                localStorage.setItem("iam_enforce_2fa", enforce_2fa ? "1" : "0");
+                showToast("Políticas corporativas actualizadas");
+                showDashboard();
+            }
+        });
+
+        function confirmOffboard(id, username) {
+            openModal({
+                title: "Confirmar Revocación Express",
+                bodyHtml: `<p>¿Deseas ejecutar el <strong>One-Click Offboarding</strong> sobre <code class="font-mono bg-zinc-100 px-1 rounded">@${username}</code>? Todas sus sesiones JWT quedarán invalidadas inmediatamente.</p>`,
+                confirmText: "Revocar ahora",
+                confirmStyle: "bg-red-600 hover:bg-red-700 text-white",
+                showCancel: true,
+                onConfirm: async () => {
+                    await apiRequest(`/admin/offboarding/${id}`, "POST");
+                    showToast(`Acceso revocado para @${username}`);
+                    loadAdminData();
+                }
+            });
+        }
+
+        async function changeUserRole(id, newRole, isActive) {
+            await apiRequest(`/admin/users/${id}`, "PATCH", { role: newRole, is_active: isActive });
+            showToast(`Perfil actualizado (${newRole})`);
+            loadAdminData();
+        }
+
+        async function activar2FA() {
+            const res = await apiRequest("/2fa/setup", "POST");
+            const data = res.data;
+
+            openModal({
+                title: "Configurar Autenticación 2FA (TOTP)",
+                bodyHtml: `
+                    <p class="mb-3">Escanea este código QR con <strong>Google Authenticator</strong> o <strong>Authy</strong>, o copia la clave manual:</p>
+                    <div class="flex justify-center my-4">
+                        <div id="qrcodeContainer" class="p-3 bg-white border border-zinc-200 rounded-xl shadow-2xs"></div>
+                    </div>
+                    <div class="flex items-center justify-between bg-zinc-100 border border-zinc-200 px-3.5 py-2.5 rounded-xl font-mono text-xs text-zinc-900">
+                        <span>${data.secret}</span>
+                        <button onclick="copyText('${data.secret}'); this.textContent='Copiado'" class="text-xs font-sans font-medium text-zinc-600 hover:text-zinc-900 bg-white border border-zinc-200 px-2.5 py-1 rounded-lg">
+                            Copiar
+                        </button>
+                    </div>
+                `,
+                confirmText: "Listo, 2FA configurado",
+                onRender: () => {
+                    const qrEl = document.getElementById("qrcodeContainer");
+                    if (qrEl && window.QRCode) {
+                        new QRCode(qrEl, {
+                            text: data.otpauth_uri || `otpauth://totp/PymeGuard:${currentUser.username}?secret=${data.secret}&issuer=PymeGuard`,
+                            width: 140,
+                            height: 140
+                        });
+                    }
+                },
+                onConfirm: () => {
+                    currentUser.totp_enabled = true;
+                    localStorage.setItem("iam_user", JSON.stringify(currentUser));
+                    showDashboard();
+                }
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem("iam_token");
+            localStorage.removeItem("iam_user");
+            location.reload();
+        }
+    </script>
+</body>
+</html>
