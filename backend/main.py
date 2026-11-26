@@ -2,10 +2,13 @@ import os
 import sys
 import sqlite3
 import datetime
+import secrets
+import json
+import urllib.parse
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Depends, Request, status
+from fastapi import FastAPI, HTTPException, Depends, Request, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -33,6 +36,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "iam_pyme.db"
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 INDEX_HTML = FRONTEND_DIR / "index.html"
+ERP_DEMO_HTML = FRONTEND_DIR / "erp-demo.html"
 
 SECRET_KEY = os.getenv("IAM_SECRET_KEY", "clave-desarrollo-cambiar-en-produccion")
 JWT_SECRET = SECRET_KEY
@@ -44,6 +48,14 @@ def get_db():
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
+
+def generate_recovery_codes(count: int = 5) -> List[str]:
+    codes = []
+    for _ in range(count):
+        p1 = secrets.token_hex(2).upper()
+        p2 = secrets.token_hex(1).upper()
+        codes.append(f"PG-{p1}-{p2}")
+    return codes
 
 def init_db():
     conn = get_db()
@@ -61,6 +73,8 @@ def init_db():
         token_version INTEGER NOT NULL DEFAULT 1,
         totp_enabled INTEGER NOT NULL DEFAULT 0,
         totp_secret TEXT,
+        recovery_codes TEXT,
+        must_change_password INTEGER NOT NULL DEFAULT 0,
         failed_attempts INTEGER NOT NULL DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -97,6 +111,27 @@ def init_db():
     );
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS active_sessions (
+        jti TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        ip_address TEXT,
+        user_agent TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        is_revoked INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    """)
+
+    # Safe Migrations for existing databases
+    cursor.execute("PRAGMA table_info(users);")
+    existing_cols = [col[1] for col in cursor.fetchall()]
+    if "must_change_password" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;")
+    if "recovery_codes" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN recovery_codes TEXT;")
+
     # Seed Default Policies
     cursor.execute("SELECT COUNT(*) FROM policies WHERE id = 1;")
     if cursor.fetchone()[0] == 0:
@@ -110,8 +145,8 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         admin_pass = hash_password("Admin123*")
         cursor.execute("""
-            INSERT INTO users (username, full_name, password_hash, role, is_active, token_version, totp_enabled, failed_attempts)
-            VALUES ('admin', 'Gerente General (Admin)', ?, 'ADMIN', 1, 1, 0, 0);
+            INSERT INTO users (username, full_name, password_hash, role, is_active, token_version, totp_enabled, must_change_password, failed_attempts)
+            VALUES ('admin', 'Gerente General (Admin)', ?, 'ADMIN', 1, 1, 0, 0, 0);
         """, (admin_pass,))
 
     # Seed Employee User
@@ -119,17 +154,17 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         emp_pass = hash_password("User123*")
         cursor.execute("""
-            INSERT INTO users (username, full_name, password_hash, role, is_active, token_version, totp_enabled, failed_attempts)
-            VALUES ('empleado', 'Juan Pérez (Contabilidad)', ?, 'CONTADOR', 1, 1, 0, 0);
+            INSERT INTO users (username, full_name, password_hash, role, is_active, token_version, totp_enabled, must_change_password, failed_attempts)
+            VALUES ('empleado', 'Juan Pérez (Contabilidad)', ?, 'CONTADOR', 1, 1, 0, 0, 0);
         """, (emp_pass,))
 
     # Seed SSO Apps
     cursor.execute("SELECT COUNT(*) FROM apps;")
     if cursor.fetchone()[0] == 0:
         default_apps = [
-            ("Sistema Contable ERP", "Facturación, impuestos y nómina", "https://ejemplo-erp.local/sso", "ADMIN,CONTADOR"),
-            ("Nube Corporativa", "Documentos compartidos y respaldos", "https://ejemplo-cloud.local/sso", "ADMIN,CONTADOR,EMPLEADO"),
-            ("Panel de Infraestructura", "Servidores y respaldos críticos", "https://ejemplo-infra.local/sso", "ADMIN")
+            ("Sistema Contable ERP", "Facturación, impuestos y nómina", "/erp-demo", "ADMIN,CONTADOR"),
+            ("Nube Corporativa", "Documentos compartidos y respaldos", "/erp-demo", "ADMIN,CONTADOR,EMPLEADO"),
+            ("Panel de Infraestructura", "Servidores y respaldos críticos", "/erp-demo", "ADMIN")
         ]
         cursor.executemany("""
             INSERT INTO apps (name, description, url, allowed_roles)
@@ -166,7 +201,7 @@ def log_audit(actor: str, action: str, details: str, ip: str = "127.0.0.1"):
 app = FastAPI(
     title="PymeGuard IAM",
     description="Gestor de Identidades y Accesos Ligero para Pymes con RBAC, 2FA TOTP y SSO Simulado",
-    version="1.0.0"
+    version="1.1.0"
 )
 
 app.add_middleware(
@@ -225,6 +260,7 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
 
     username = payload.get("sub")
     token_version = payload.get("token_version")
+    jti = payload.get("jti")
 
     if not username:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token con payload inválido.")
@@ -233,19 +269,31 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE username = ?;", (username,))
     user = cursor.fetchone()
-    conn.close()
 
     if not user:
+        conn.close()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no encontrado.")
 
     user_dict = dict(user)
 
     if not user_dict["is_active"]:
+        conn.close()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cuenta desactivada o revocada por seguridad.")
 
     if user_dict["token_version"] != token_version:
+        conn.close()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión revocada. Por favor inicie sesión nuevamente.")
 
+    # Validate JTI Active Session
+    if jti:
+        cursor.execute("SELECT is_revoked FROM active_sessions WHERE jti = ?;", (jti,))
+        sess = cursor.fetchone()
+        if sess and sess["is_revoked"] == 1:
+            conn.close()
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Esta sesión específica fue cerrada o revocada.")
+
+    conn.close()
+    user_dict["current_jti"] = jti
     return user_dict
 
 def get_current_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -267,6 +315,7 @@ def health():
 @app.post("/api/login")
 def login(req: LoginRequest, request: Request):
     client_ip = request.client.host if request.client else "127.0.0.1"
+    user_agent = request.headers.get("user-agent", "Navegador Web")
     conn = get_db()
     cursor = conn.cursor()
 
@@ -295,6 +344,7 @@ def login(req: LoginRequest, request: Request):
 
         if failed >= max_attempts and user["username"] != "admin":
             cursor.execute("UPDATE users SET failed_attempts = ?, is_active = 0, token_version = token_version + 1 WHERE id = ?;", (failed, user["id"]))
+            cursor.execute("UPDATE active_sessions SET is_revoked = 1 WHERE user_id = ?;", (user["id"],))
             conn.commit()
             conn.close()
             log_audit(user["username"], "BRUTE_FORCE_LOCK", f"Cuenta bloqueada automáticamente tras {failed} intentos fallidos.", client_ip)
@@ -310,31 +360,67 @@ def login(req: LoginRequest, request: Request):
     cursor.execute("UPDATE users SET failed_attempts = 0 WHERE id = ?;", (user["id"],))
     conn.commit()
 
-    # 2FA Verification
+    # 2FA Verification (Supports TOTP 6 digits OR 1-time Recovery Code)
     is_2fa_enforced = bool(policy.get("enforce_2fa", 0))
     user_has_totp = bool(user.get("totp_enabled") and user.get("totp_secret"))
 
     if user_has_totp or (is_2fa_enforced and user.get("totp_secret")):
         if not req.totp_code:
             conn.close()
-            return {"require_2fa": True, "detail": "Se requiere código de verificación 2FA (TOTP)."}
+            return {"require_2fa": True, "detail": "Se requiere código de verificación 2FA (TOTP o Código de Respaldo)."}
 
-        totp = pyotp.TOTP(user["totp_secret"])
-        if not totp.verify(req.totp_code.strip(), valid_window=1):
+        code_input = req.totp_code.strip().upper()
+        totp_verified = False
+
+        # 1. Test standard 6-digit TOTP
+        if len(code_input) == 6 and code_input.isdigit():
+            totp = pyotp.TOTP(user["totp_secret"])
+            if totp.verify(code_input, valid_window=1):
+                totp_verified = True
+
+        # 2. Test Recovery Code if TOTP failed
+        if not totp_verified and user.get("recovery_codes"):
+            try:
+                codes_list = json.loads(user["recovery_codes"])
+                if code_input in [c.upper().strip() for c in codes_list]:
+                    totp_verified = True
+                    # Consume the recovery code
+                    codes_list = [c for c in codes_list if c.upper().strip() != code_input]
+                    cursor.execute("UPDATE users SET recovery_codes = ? WHERE id = ?;", (json.dumps(codes_list), user["id"]))
+                    conn.commit()
+                    log_audit(user["username"], "2FA_RECOVERY_CODE_USED", f"Código de respaldo utilizado. Códigos restantes: {len(codes_list)}.", client_ip)
+            except Exception as e:
+                print(f"Error parsing recovery codes: {e}", file=sys.stderr)
+
+        if not totp_verified:
             conn.close()
-            log_audit(user["username"], "2FA_FAILED", "Código TOTP inválido o expirado.", client_ip)
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Código 2FA inválido (6 dígitos)")
+            log_audit(user["username"], "2FA_FAILED", "Código 2FA o código de respaldo inválido.", client_ip)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Código 2FA o código de respaldo inválido.")
 
+    # Create Session & JTI
+    jti = secrets.token_hex(16)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expires_at = now + datetime.timedelta(minutes=JWT_EXPIRE_MINUTES)
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    exp_str = expires_at.strftime("%Y-%m-%d %H:%M:%S")
+
+    cursor.execute("""
+        INSERT INTO active_sessions (jti, user_id, ip_address, user_agent, created_at, expires_at, is_revoked)
+        VALUES (?, ?, ?, ?, ?, ?, 0);
+    """, (jti, user["id"], client_ip, user_agent, now_str, exp_str))
+    conn.commit()
     conn.close()
 
     # Issue JWT
-    now = datetime.datetime.now(datetime.timezone.utc)
+    must_change = bool(user.get("must_change_password", 0))
     payload = {
+        "jti": jti,
         "sub": user["username"],
         "role": user["role"],
         "token_version": user["token_version"],
+        "must_change_password": must_change,
         "iat": now,
-        "exp": now + datetime.timedelta(minutes=JWT_EXPIRE_MINUTES)
+        "exp": expires_at
     }
     access_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -345,11 +431,14 @@ def login(req: LoginRequest, request: Request):
         "token_type": "bearer",
         "enforce_2fa": is_2fa_enforced,
         "company_name": policy.get("company_name", "Mi Pyme S.A."),
+        "require_password_change": must_change,
         "user": {
+            "id": user["id"],
             "username": user["username"],
             "full_name": user["full_name"],
             "role": user["role"],
-            "totp_enabled": bool(user["totp_enabled"])
+            "totp_enabled": bool(user["totp_enabled"]),
+            "must_change_password": must_change
         }
     }
 
@@ -369,42 +458,111 @@ def get_portal_apps(user: Dict[str, Any] = Depends(get_current_user)):
     for a in all_apps:
         roles_allowed = [r.strip() for r in a["allowed_roles"].split(",") if r.strip()]
         if user_role in roles_allowed:
-            # Generate short-lived SSO token (5 min)
+            # Generate short-lived SSO token (5 min) with token_version for Zero-Trust validation
             sso_payload = {
                 "sub": user["username"],
                 "role": user["role"],
+                "full_name": user["full_name"],
                 "app": a["name"],
-                "iat": now,
-                "exp": now + datetime.timedelta(minutes=5)
+                "token_version": user["token_version"],
+                "iat": int(now.timestamp()),
+                "exp": int((now + datetime.timedelta(minutes=5)).timestamp())
             }
             sso_token = jwt.encode(sso_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-            sso_redirect_url = f"{a['url']}?sso_token={sso_token}"
+            sso_redirect_url = f"/erp-demo?token={sso_token}&app={urllib.parse.quote(a['name'])}"
 
             authorized_apps.append({
                 "id": a["id"],
                 "name": a["name"],
                 "description": a["description"],
+                "url": a["url"],
                 "sso_redirect_url": sso_redirect_url
             })
 
     return authorized_apps
 
+# SSO Verification Endpoint for Connected Apps (e.g., ERP demo)
+@app.get("/api/sso/verify")
+def verify_sso(token: str = Query(...)):
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token SSO no proporcionado")
+    
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token SSO expirado (vigencia máxima: 5 minutos).")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Firma criptográfica de token SSO inválida.")
+
+    username = payload.get("sub")
+    token_version = payload.get("token_version")
+    app_name = payload.get("app")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE username = ?;", (username,))
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario SSO no encontrado en PymeGuard IAM.")
+
+    user = dict(row)
+
+    if not user["is_active"]:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="401 Sesión Revocada: El usuario fue desactivado en PymeGuard IAM (One-Click Offboarding).")
+
+    if user["token_version"] != token_version:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="401 Sesión Revocada: Las credenciales fueron invalidadas en tiempo real por el Administrador.")
+
+    # Check RBAC permissions for requested application
+    if app_name:
+        cursor.execute("SELECT allowed_roles FROM apps WHERE name = ?;", (app_name,))
+        app_row = cursor.fetchone()
+        if app_row:
+            allowed = [r.strip() for r in app_row["allowed_roles"].split(",") if r.strip()]
+            if user["role"] not in allowed:
+                conn.close()
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Acceso denegado: El rol {user['role']} no tiene permisos para {app_name}.")
+
+    conn.close()
+
+    iat_dt = datetime.datetime.fromtimestamp(payload["iat"], datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S") if "iat" in payload else "Reciente"
+    exp_dt = datetime.datetime.fromtimestamp(payload["exp"], datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S") if "exp" in payload else "Válido"
+
+    return {
+        "ok": True,
+        "valid": True,
+        "status": "VERIFIED",
+        "app": app_name or "Aplicación SSO",
+        "user": {
+            "username": user["username"],
+            "full_name": user["full_name"],
+            "role": user["role"]
+        },
+        "issued_at": iat_dt,
+        "expires_at": exp_dt
+    }
+
 @app.post("/api/2fa/setup")
 def setup_2fa(user: Dict[str, Any] = Depends(get_current_user), request: Request = None):
     client_ip = request.client.host if request and request.client else "127.0.0.1"
     secret = pyotp.random_base32()
+    recovery_codes = generate_recovery_codes(5)
 
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE users 
-        SET totp_secret = ?, totp_enabled = 1 
+        SET totp_secret = ?, totp_enabled = 1, recovery_codes = ? 
         WHERE id = ?;
-    """, (secret, user["id"]))
+    """, (secret, json.dumps(recovery_codes), user["id"]))
     conn.commit()
     conn.close()
 
-    log_audit(user["username"], "2FA_ENABLED", "El usuario activó el segundo factor (TOTP).", client_ip)
+    log_audit(user["username"], "2FA_ENABLED", "El usuario activó el segundo factor (TOTP) y generó 5 códigos de respaldo.", client_ip)
 
     otpauth_uri = pyotp.totp.TOTP(secret).provisioning_uri(
         name=user["username"],
@@ -413,7 +571,8 @@ def setup_2fa(user: Dict[str, Any] = Depends(get_current_user), request: Request
 
     return {
         "secret": secret,
-        "otpauth_uri": otpauth_uri
+        "otpauth_uri": otpauth_uri,
+        "recovery_codes": recovery_codes
     }
 
 @app.post("/api/profile/password")
@@ -422,7 +581,7 @@ def change_password(req: PasswordChangeRequest, user: Dict[str, Any] = Depends(g
     
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT password_hash FROM users WHERE id = ?;", (user["id"],))
+    cursor.execute("SELECT password_hash, must_change_password FROM users WHERE id = ?;", (user["id"],))
     row = cursor.fetchone()
 
     if not row or not verify_password(req.current_password, row["password_hash"]):
@@ -434,24 +593,120 @@ def change_password(req: PasswordChangeRequest, user: Dict[str, Any] = Depends(g
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La nueva contraseña debe tener al menos 6 caracteres.")
 
     new_hash = hash_password(req.new_password)
-    # Increment token_version to invalidate previous sessions
+    was_first_login = bool(row["must_change_password"])
+
+    # Update password, remove must_change_password flag, increment token_version
+    new_token_version = user["token_version"] + 1
     cursor.execute("""
         UPDATE users 
-        SET password_hash = ?, token_version = token_version + 1 
+        SET password_hash = ?, token_version = ?, must_change_password = 0 
         WHERE id = ?;
-    """, (new_hash, user["id"]))
+    """, (new_hash, new_token_version, user["id"]))
+
+    # Revoke all previous active sessions
+    cursor.execute("UPDATE active_sessions SET is_revoked = 1 WHERE user_id = ?;", (user["id"],))
+
+    # Issue a fresh new active session and token for the current user so they stay logged in
+    jti = secrets.token_hex(16)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expires_at = now + datetime.timedelta(minutes=JWT_EXPIRE_MINUTES)
+    user_agent = request.headers.get("user-agent", "Navegador Web") if request else "Navegador Web"
+
+    cursor.execute("""
+        INSERT INTO active_sessions (jti, user_id, ip_address, user_agent, created_at, expires_at, is_revoked)
+        VALUES (?, ?, ?, ?, ?, ?, 0);
+    """, (jti, user["id"], client_ip, user_agent, now.strftime("%Y-%m-%d %H:%M:%S"), expires_at.strftime("%Y-%m-%d %H:%M:%S")))
+
     conn.commit()
     conn.close()
 
-    log_audit(user["username"], "PASSWORD_CHANGED", "El usuario actualizó su contraseña corporativa e invalidó sesiones previas.", client_ip)
-    return {"message": "Contraseña actualizada exitosamente"}
+    action_label = "FIRST_LOGIN_PASSWORD_RESET" if was_first_login else "PASSWORD_CHANGED"
+    log_audit(user["username"], action_label, "El usuario actualizó su contraseña corporativa e invalidó sesiones previas.", client_ip)
+
+    # Issue refreshed JWT
+    new_payload = {
+        "jti": jti,
+        "sub": user["username"],
+        "role": user["role"],
+        "token_version": new_token_version,
+        "must_change_password": False,
+        "iat": now,
+        "exp": expires_at
+    }
+    new_access_token = jwt.encode(new_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+    return {
+        "message": "Contraseña actualizada exitosamente",
+        "access_token": new_access_token,
+        "must_change_password": False
+    }
+
+# Session Management Endpoints
+@app.get("/api/sessions")
+def get_sessions(all: bool = False, user: Dict[str, Any] = Depends(get_current_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if all and user["role"] == "ADMIN":
+        cursor.execute("""
+            SELECT s.jti, s.user_id, s.ip_address, s.user_agent, s.created_at, s.expires_at, s.is_revoked,
+                   u.username, u.full_name, u.role
+            FROM active_sessions s
+            JOIN users u ON s.user_id = u.id
+            WHERE s.is_revoked = 0
+            ORDER BY s.created_at DESC
+            LIMIT 100;
+        """)
+    else:
+        cursor.execute("""
+            SELECT s.jti, s.user_id, s.ip_address, s.user_agent, s.created_at, s.expires_at, s.is_revoked,
+                   u.username, u.full_name, u.role
+            FROM active_sessions s
+            JOIN users u ON s.user_id = u.id
+            WHERE s.user_id = ? AND s.is_revoked = 0
+            ORDER BY s.created_at DESC
+            LIMIT 50;
+        """, (user["id"],))
+
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    current_jti = user.get("current_jti")
+    for r in rows:
+        r["is_current"] = (r["jti"] == current_jti)
+
+    return rows
+
+@app.delete("/api/sessions/{jti}")
+def revoke_session(jti: str, user: Dict[str, Any] = Depends(get_current_user), request: Request = None):
+    client_ip = request.client.host if request and request.client else "127.0.0.1"
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM active_sessions WHERE jti = ?;", (jti,))
+    sess = cursor.fetchone()
+
+    if not sess:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sesión no encontrada.")
+
+    sess_dict = dict(sess)
+    if sess_dict["user_id"] != user["id"] and user["role"] != "ADMIN":
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permisos para revocar esta sesión.")
+
+    cursor.execute("UPDATE active_sessions SET is_revoked = 1 WHERE jti = ?;", (jti,))
+    conn.commit()
+    conn.close()
+
+    log_audit(user["username"], "SESSION_REVOKED", f"Sesión individual ({jti[:8]}...) revocada exitosamente.", client_ip)
+    return {"message": "Sesión revocada exitosamente"}
 
 # Admin Users Endpoints
 @app.get("/api/admin/users")
 def list_users(admin: Dict[str, Any] = Depends(get_current_admin)):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, full_name, role, is_active, totp_enabled FROM users ORDER BY id ASC;")
+    cursor.execute("SELECT id, username, full_name, role, is_active, totp_enabled, must_change_password FROM users ORDER BY id ASC;")
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return users
@@ -474,15 +729,16 @@ def create_user(req: UserCreateRequest, admin: Dict[str, Any] = Depends(get_curr
     hashed = hash_password(req.password)
     role_normalized = req.role.strip().upper()
 
+    # Newly created users are forced to change their password on first login
     cursor.execute("""
-        INSERT INTO users (username, full_name, password_hash, role, is_active, token_version, totp_enabled, failed_attempts)
-        VALUES (?, ?, ?, ?, 1, 1, 0, 0);
+        INSERT INTO users (username, full_name, password_hash, role, is_active, token_version, totp_enabled, must_change_password, failed_attempts)
+        VALUES (?, ?, ?, ?, 1, 1, 0, 1, 0);
     """, (username, req.full_name.strip(), hashed, role_normalized))
     conn.commit()
     conn.close()
 
-    log_audit(admin["username"], "USER_CREATED", f"Creó al usuario '{username}' con rol {role_normalized}.", client_ip)
-    return {"message": "Usuario creado exitosamente"}
+    log_audit(admin["username"], "USER_CREATED", f"Creó al usuario '{username}' con rol {role_normalized} (Cambio de contraseña forzado requerido).", client_ip)
+    return {"message": "Usuario creado exitosamente (requiere cambio de contraseña en su primer inicio de sesión)"}
 
 @app.patch("/api/admin/users/{user_id}")
 def update_user(user_id: int, req: UserUpdateRequest, admin: Dict[str, Any] = Depends(get_current_admin), request: Request = None):
@@ -507,9 +763,10 @@ def update_user(user_id: int, req: UserUpdateRequest, admin: Dict[str, Any] = De
     if req.is_active is not None:
         updates.append("is_active = ?")
         params.append(req.is_active)
-        # If deactivating, increment token_version for real-time revocation
+        # If deactivating, increment token_version and revoke sessions
         if req.is_active == 0:
             updates.append("token_version = token_version + 1")
+            cursor.execute("UPDATE active_sessions SET is_revoked = 1 WHERE user_id = ?;", (user_id,))
 
     if updates:
         query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?;"
@@ -521,6 +778,30 @@ def update_user(user_id: int, req: UserUpdateRequest, admin: Dict[str, Any] = De
 
     log_audit(admin["username"], "ROLE_UPDATED", f"Actualizó a '{target['username']}' -> Rol: {req.role or target['role']}, Activo: {req.is_active if req.is_active is not None else target['is_active']}.", client_ip)
     return {"message": "Usuario actualizado exitosamente"}
+
+@app.post("/api/admin/users/{user_id}/reset-2fa")
+def reset_user_2fa(user_id: int, admin: Dict[str, Any] = Depends(get_current_admin), request: Request = None):
+    client_ip = request.client.host if request and request.client else "127.0.0.1"
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE id = ?;", (user_id,))
+    target = cursor.fetchone()
+
+    if not target:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    target = dict(target)
+    cursor.execute("""
+        UPDATE users 
+        SET totp_enabled = 0, totp_secret = NULL, recovery_codes = NULL 
+        WHERE id = ?;
+    """, (user_id,))
+    conn.commit()
+    conn.close()
+
+    log_audit(admin["username"], "2FA_RESET_BY_ADMIN", f"El Administrador restableció y desactivó el 2FA del colaborador @{target['username']}.", client_ip)
+    return {"message": f"2FA restablecido exitosamente para el usuario @{target['username']}."}
 
 @app.post("/api/admin/offboarding/{user_id}")
 def emergency_offboarding(user_id: int, admin: Dict[str, Any] = Depends(get_current_admin), request: Request = None):
@@ -536,12 +817,13 @@ def emergency_offboarding(user_id: int, admin: Dict[str, Any] = Depends(get_curr
 
     target = dict(target)
 
-    # Deactivate and bump token_version immediately
+    # Deactivate, bump token_version immediately, and revoke all active sessions
     cursor.execute("UPDATE users SET is_active = 0, token_version = token_version + 1 WHERE id = ?;", (user_id,))
+    cursor.execute("UPDATE active_sessions SET is_revoked = 1 WHERE user_id = ?;", (user_id,))
     conn.commit()
     conn.close()
 
-    log_audit(admin["username"], "EMERGENCY_OFFBOARDING", f"Revocación inmediata ejecutada sobre '{target['username']}'.", client_ip)
+    log_audit(admin["username"], "EMERGENCY_OFFBOARDING", f"Revocación inmediata ejecutada sobre '{target['username']}'. Todas las sesiones activas fueron invalidadas.", client_ip)
     return {"message": "Acceso revocado y credenciales invalidadas"}
 
 # Admin SSO Apps Endpoints
@@ -626,7 +908,13 @@ def get_audit_logs(admin: Dict[str, Any] = Depends(get_current_admin)):
     conn.close()
     return logs
 
-# Static Frontend Serving
+# Static Frontend & ERP Demo Serving
+@app.get("/erp-demo")
+def serve_erp_demo():
+    if ERP_DEMO_HTML.exists():
+        return FileResponse(str(ERP_DEMO_HTML))
+    return JSONResponse({"message": "Simulador ERP no encontrado en frontend/erp-demo.html"}, status_code=404)
+
 @app.get("/")
 def serve_index():
     if INDEX_HTML.exists():
