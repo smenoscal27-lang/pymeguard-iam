@@ -414,11 +414,11 @@
                 <div class="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs">
                     <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">Nuevo colaborador</h3>
                     <form id="createUserForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                        <input type="text" id="newUsername" placeholder="Usuario (ej. mgarcia)" required 
+                        <input type="text" id="newUsername" placeholder="Usuario (ej. mgarcia)" required pattern="^[a-zA-Z0-9_.-]{3,30}$" title="Entre 3 y 30 caracteres alfanuméricos, guiones o puntos"
                             class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 transition">
-                        <input type="text" id="newFullName" placeholder="Nombre completo" required 
+                        <input type="text" id="newFullName" placeholder="Nombre completo" required minlength="2"
                             class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 transition">
-                        <input type="password" id="newPassword" placeholder="Contraseña inicial" required 
+                        <input type="password" id="newPassword" placeholder="Contraseña (mín. 8 car.)" required minlength="8"
                             class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 transition">
                         <select id="newRole" class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-zinc-900 transition">
                             <option value="EMPLEADO">Rol: Empleado</option>
@@ -469,7 +469,7 @@
                                 class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900">
                             <input type="text" id="appDescInput" placeholder="Descripción breve" required
                                 class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900">
-                            <input type="url" id="appUrlInput" placeholder="URL SSO (https://...)" required
+                            <input type="text" id="appUrlInput" placeholder="URL SSO (https://... o /erp-demo)" required
                                 class="px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900">
                         </div>
                         <div class="flex flex-wrap items-center justify-between gap-4 pt-1">
@@ -969,12 +969,12 @@
                             <input type="password" id="forcedCurrentPassword" value="${tempPassword}" placeholder="Contraseña actual" required
                                 class="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900 dark:focus:border-white">
                             
-                            <label class="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">Nueva contraseña definitiva (mínimo 6 caracteres):</label>
-                            <input type="password" id="forcedNewPassword" placeholder="Tu nueva contraseña secreta" minlength="6" required
+                            <label class="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">Nueva contraseña definitiva (mínimo 8 caracteres):</label>
+                            <input type="password" id="forcedNewPassword" placeholder="Tu nueva contraseña secreta (mín. 8 caracteres)" minlength="8" required
                                 class="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900 dark:focus:border-white">
                             
                             <label class="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">Confirmar nueva contraseña:</label>
-                            <input type="password" id="forcedConfirmPassword" placeholder="Confirma tu nueva contraseña" minlength="6" required
+                            <input type="password" id="forcedConfirmPassword" placeholder="Confirma tu nueva contraseña" minlength="8" required
                                 class="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:border-zinc-900 dark:focus:border-white">
                         </div>
                     </div>
@@ -986,8 +986,8 @@
                     const curP = document.getElementById("forcedCurrentPassword").value;
                     const newP = document.getElementById("forcedNewPassword").value;
                     const confP = document.getElementById("forcedConfirmPassword").value;
-                    if (!newP || newP.length < 6) {
-                        showToast("La contraseña debe tener al menos 6 caracteres", "error");
+                    if (!newP || newP.length < 8) {
+                        showToast("La contraseña debe tener al menos 8 caracteres", "error");
                         showMandatoryPasswordChangeModal(curP);
                         return;
                     }
@@ -1268,10 +1268,14 @@
             e.preventDefault();
             const roles = Array.from(document.querySelectorAll(".app-role-cb:checked")).map(cb => cb.value);
             if (!roles.length) return showToast("Selecciona al menos un rol permitido", "error");
+            const urlVal = document.getElementById("appUrlInput").value.trim();
+            if (!urlVal.startsWith("http://") && !urlVal.startsWith("https://") && !urlVal.startsWith("/")) {
+                return showToast("La URL debe iniciar con http://, https:// o /", "error");
+            }
             const payload = {
                 name: document.getElementById("appNameInput").value.trim(),
                 description: document.getElementById("appDescInput").value.trim(),
-                url: document.getElementById("appUrlInput").value.trim(),
+                url: urlVal,
                 allowed_roles: roles.join(",")
             };
             const res = await apiRequest("/admin/apps", "POST", payload);

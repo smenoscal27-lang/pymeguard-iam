@@ -5,14 +5,17 @@ import datetime
 import secrets
 import json
 import urllib.parse
+import re
+import io
+import csv
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Depends, Request, status, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 import jwt
 import pyotp
 
@@ -222,28 +225,102 @@ class LoginRequest(BaseModel):
 
 class PasswordChangeRequest(BaseModel):
     current_password: str
-    new_password: str
+    new_password: str = Field(..., min_length=8)
+
+    @validator("new_password")
+    def validate_new_pass(cls, v):
+        if len(v) < 8:
+            raise ValueError("La nueva contraseña debe tener al menos 8 caracteres.")
+        return v
 
 class UserCreateRequest(BaseModel):
-    username: str
-    full_name: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=30)
+    full_name: str = Field(..., min_length=2, max_length=100)
+    password: str = Field(..., min_length=8, max_length=128)
     role: str
+
+    @validator("username")
+    def validate_username(cls, v):
+        v = v.strip().lower()
+        if not re.match(r"^[a-zA-Z0-9_.-]{3,30}$", v):
+            raise ValueError("El nombre de usuario debe tener entre 3 y 30 caracteres alfanuméricos, guiones o puntos.")
+        return v
+
+    @validator("full_name")
+    def validate_full_name(cls, v):
+        v = v.strip()
+        if len(v) < 2:
+            raise ValueError("El nombre completo debe tener al menos 2 caracteres.")
+        return v
+
+    @validator("password")
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres.")
+        return v
+
+    @validator("role")
+    def validate_role(cls, v):
+        v = v.strip().upper()
+        if v not in {"ADMIN", "CONTADOR", "EMPLEADO"}:
+            raise ValueError("Rol inválido. Debe ser ADMIN, CONTADOR o EMPLEADO.")
+        return v
 
 class UserUpdateRequest(BaseModel):
     role: Optional[str] = None
     is_active: Optional[int] = None
 
+    @validator("role")
+    def validate_role(cls, v):
+        if v is not None:
+            v = v.strip().upper()
+            if v not in {"ADMIN", "CONTADOR", "EMPLEADO"}:
+                raise ValueError("Rol inválido. Debe ser ADMIN, CONTADOR o EMPLEADO.")
+            return v
+        return v
+
+    @validator("is_active")
+    def validate_is_active(cls, v):
+        if v is not None and v not in (0, 1):
+            raise ValueError("is_active debe ser 0 o 1.")
+        return v
+
 class AppCreateRequest(BaseModel):
-    name: str
-    description: str
-    url: str
-    allowed_roles: str
+    name: str = Field(..., min_length=2, max_length=100)
+    description: str = Field(..., min_length=2, max_length=250)
+    url: str = Field(..., min_length=1)
+    allowed_roles: str = Field(..., min_length=1)
+
+    @validator("name")
+    def validate_name(cls, v):
+        v = v.strip()
+        if len(v) < 2:
+            raise ValueError("El nombre debe tener al menos 2 caracteres.")
+        return v
+
+    @validator("url")
+    def validate_url(cls, v):
+        v = v.strip()
+        if not (v.startswith("http://") or v.startswith("https://") or v.startswith("/")):
+            raise ValueError("La URL debe ser una dirección web válida (http://, https://) o una ruta relativa (/...).")
+        return v
+
+    @validator("allowed_roles")
+    def validate_roles(cls, v):
+        v = v.strip()
+        roles = [r.strip().upper() for r in v.split(",") if r.strip()]
+        valid_roles = {"ADMIN", "CONTADOR", "EMPLEADO"}
+        if not roles:
+            raise ValueError("Debe especificar al menos un rol permitido.")
+        for r in roles:
+            if r not in valid_roles:
+                raise ValueError(f"Rol inválido: '{r}'. Roles válidos: {', '.join(valid_roles)}")
+        return ",".join(roles)
 
 class PolicyUpdateRequest(BaseModel):
-    company_name: str
-    enforce_2fa: int
-    max_login_attempts: int
+    company_name: str = Field(..., min_length=1, max_length=100)
+    enforce_2fa: int = Field(..., ge=0, le=1)
+    max_login_attempts: int = Field(..., ge=1, le=20)
 
 # Auth Dependency
 def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Dict[str, Any]:
@@ -588,9 +665,9 @@ def change_password(req: PasswordChangeRequest, user: Dict[str, Any] = Depends(g
         conn.close()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="La contraseña actual es incorrecta.")
 
-    if len(req.new_password) < 6:
+    if len(req.new_password) < 8:
         conn.close()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La nueva contraseña debe tener al menos 6 caracteres.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La nueva contraseña debe tener al menos 8 caracteres.")
 
     new_hash = hash_password(req.new_password)
     was_first_login = bool(row["must_change_password"])
@@ -767,6 +844,8 @@ def update_user(user_id: int, req: UserUpdateRequest, admin: Dict[str, Any] = De
         if req.is_active == 0:
             updates.append("token_version = token_version + 1")
             cursor.execute("UPDATE active_sessions SET is_revoked = 1 WHERE user_id = ?;", (user_id,))
+        elif req.is_active == 1:
+            updates.append("failed_attempts = 0")
 
     if updates:
         query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?;"
@@ -907,6 +986,28 @@ def get_audit_logs(admin: Dict[str, Any] = Depends(get_current_admin)):
     logs = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return logs
+
+@app.get("/api/admin/logs/export")
+def export_audit_logs_csv(admin: Dict[str, Any] = Depends(get_current_admin)):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, timestamp, actor, action, details, ip_address FROM audit_logs ORDER BY id DESC;")
+    rows = cursor.fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "Timestamp", "Actor", "Action", "Details", "IP_Address"])
+    for r in rows:
+        writer.writerow([r["id"], r["timestamp"], r["actor"], r["action"], r["details"], r["ip_address"]])
+
+    csv_data = output.getvalue()
+    filename = f"auditoria_iam_{datetime.datetime.now().strftime('%Y%m%d')}.csv"
+    return Response(
+        content=csv_data,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 # Static Frontend & ERP Demo Serving
 @app.get("/erp-demo")
